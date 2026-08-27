@@ -6,9 +6,9 @@ package turns that corpus into a trained model.
 
 ## Project status
 
-Early scaffolding. The repository currently contains the project structure,
-tooling, and CI only — the crawler and LLM packages are empty placeholders.
-Features will be added incrementally.
+Early development. The single-worker crawler is implemented: it fetches a URL
+and produces a clean, validated training document. The `llm` package is still
+an empty placeholder. Features are added incrementally.
 
 ## Requirements
 
@@ -22,6 +22,15 @@ git clone https://github.com/saintsauceee/BubuLM.git
 cd BubuLM
 uv sync --all-groups
 ```
+
+## Running the crawler
+
+```bash
+uv run python -m crawler https://example.com
+```
+
+See [docs/crawler.md](docs/crawler.md) for options, configuration, and library
+usage.
 
 ## Running tests
 
@@ -41,13 +50,8 @@ uv run pyright             # static type check
 
 ```text
 bubulm/
-├── crawler/   # web crawling (empty)
+├── crawler/   # single-worker crawl pipeline
 ├── llm/       # model training and inference (empty)
 ├── tests/     # test suite
-└── docs/      # design notes (empty)
+└── docs/      # component documentation
 ```
-
-## Contributing
-
-Work happens on feature branches (`feat/…`, `fix/…`, `chore/…`), never directly
-on `main`. Open a pull request and merge only once CI is green.
