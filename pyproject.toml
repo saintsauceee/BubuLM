@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "BubuLM: a web crawler and language model pipeline, built from scratch."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+]
 
 [build-system]
 requires = ["hatchling"]
