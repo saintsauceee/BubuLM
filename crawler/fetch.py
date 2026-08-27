@@ -17,7 +17,12 @@ import httpx
 
 from crawler.config import CrawlerConfig
 from crawler.content_types import ensure_accepted_content_type
-from crawler.errors import FetchError, ResponseTooLargeError, TransientFetchError
+from crawler.errors import (
+    FetchError,
+    InvalidURLError,
+    ResponseTooLargeError,
+    TransientFetchError,
+)
 
 SleepFunc = Callable[[float], None]
 
@@ -112,6 +117,24 @@ class Fetcher:
         ) from last_error
 
     def _fetch_once(self, url: str) -> FetchResult:
+        """Make one attempt, translating httpx failures into crawler errors.
+
+        Only transport errors are allowed to propagate as httpx exceptions, so
+        that :meth:`fetch` can decide whether to retry them. Everything else
+        httpx can raise -- redirect loops, decoding failures, malformed URLs --
+        is deterministic, so it is reported as a permanent failure rather than
+        escaping the CrawlError hierarchy.
+        """
+        try:
+            return self._request(url)
+        except httpx.TransportError:
+            raise
+        except httpx.InvalidURL as error:
+            raise InvalidURLError(f"httpx rejected {url!r}: {error}") from error
+        except httpx.HTTPError as error:
+            raise FetchError(f"Could not fetch {url!r}: {error}") from error
+
+    def _request(self, url: str) -> FetchResult:
         headers = {"User-Agent": self.config.user_agent}
         with self._client.stream("GET", url, headers=headers) as response:
             if response.status_code in self.config.retry_status_codes:
