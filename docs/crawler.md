@@ -77,7 +77,7 @@ subclass naming the stage that rejected the URL:
 | Exception | Meaning |
 | --- | --- |
 | `InvalidURLError` | Empty, host-less, or non-HTTP(S) URL |
-| `FetchError` | Non-retryable HTTP error, such as a 404 |
+| `FetchError` | Non-retryable HTTP error, such as a 404 or a redirect loop |
 | `TransientFetchError` | Timeouts or 5xx responses, after retries were exhausted |
 | `ContentTypeRejectedError` | The response was not (X)HTML |
 | `ResponseTooLargeError` | The body exceeded `max_response_bytes` |
@@ -123,7 +123,14 @@ characters. Whitespace inside `<pre>` is collapsed like any other text.
 
 **Retries** cover transport errors and the retryable status codes, with
 exponential backoff. Rejections that would not change on a second attempt --
-bad content type, oversized body, failed quality check -- are never retried.
+bad content type, oversized body, redirect loop, failed quality check -- are
+never retried.
+
+**No httpx exception escapes.** Every failure httpx can raise is translated
+into a `CrawlError`: transport errors stay retryable, while deterministic
+failures (redirect loops, decoding errors, malformed URLs) become permanent
+ones. A caller catching `CrawlError` catches everything the crawler can fail
+with.
 
 ## Running the tests
 

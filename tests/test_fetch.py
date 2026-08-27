@@ -10,10 +10,13 @@ import pytest
 from crawler.config import CrawlerConfig
 from crawler.errors import (
     ContentTypeRejectedError,
+    CrawlError,
     FetchError,
+    InvalidURLError,
     ResponseTooLargeError,
     TransientFetchError,
 )
+from crawler.fetch import Fetcher
 from tests.conftest import html_page, html_response, make_fetcher
 
 
@@ -277,3 +280,79 @@ def test_content_type_rejection_is_not_retried() -> None:
     with pytest.raises(ContentTypeRejectedError):
         make_fetcher(handler).fetch("https://example.com/logo.png")
     assert len(attempts) == 1
+
+
+# --- httpx failures are translated into crawler errors ----------------------
+
+
+def test_redirect_loop_raises_a_crawl_error() -> None:
+    """A redirect loop must be a clean rejection, not a raw httpx exception."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"location": "https://example.com/next"})
+
+    client = httpx.Client(
+        transport=httpx.MockTransport(handler), follow_redirects=True, max_redirects=3
+    )
+    fetcher = Fetcher(CrawlerConfig(), client=client, sleep=lambda _: None)
+
+    with pytest.raises(CrawlError):
+        fetcher.fetch("https://example.com/loop")
+
+
+def test_redirect_loop_is_not_retried() -> None:
+    attempts: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        return httpx.Response(302, headers={"location": "https://example.com/next"})
+
+    client = httpx.Client(
+        transport=httpx.MockTransport(handler), follow_redirects=True, max_redirects=2
+    )
+    fetcher = Fetcher(CrawlerConfig(max_attempts=3), client=client, sleep=lambda _: None)
+
+    with pytest.raises(FetchError) as caught:
+        fetcher.fetch("https://example.com/loop")
+
+    assert not isinstance(caught.value, TransientFetchError)
+    # 3 requests for the redirect chain, and no second attempt after it fails.
+    assert len(attempts) == 3
+
+
+def test_decoding_errors_are_translated() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.DecodingError("bad content encoding", request=request)
+
+    with pytest.raises(CrawlError):
+        make_fetcher(handler).fetch("https://example.com/")
+
+
+def test_invalid_url_from_httpx_is_translated() -> None:
+    """httpx signals a malformed URL with InvalidURL, which is not an HTTPError."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.InvalidURL("malformed URL")
+
+    with pytest.raises(InvalidURLError):
+        make_fetcher(handler).fetch("https://example.com/")
+
+
+def test_no_httpx_exception_escapes_the_crawl_error_hierarchy() -> None:
+    """Every httpx failure a transport can raise must surface as a CrawlError."""
+    failures = [
+        httpx.TooManyRedirects("too many redirects"),
+        httpx.DecodingError("bad encoding"),
+        httpx.InvalidURL("malformed URL"),
+        httpx.ConnectError("refused"),
+        httpx.ReadTimeout("slow"),
+        httpx.RemoteProtocolError("bad framing"),
+    ]
+
+    for failure in failures:
+
+        def handler(request: httpx.Request, error: Exception = failure) -> httpx.Response:
+            raise error
+
+        with pytest.raises(CrawlError):
+            make_fetcher(handler, CrawlerConfig(max_attempts=1)).fetch("https://example.com/")
