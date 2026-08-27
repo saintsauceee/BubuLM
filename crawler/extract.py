@@ -84,6 +84,7 @@ MAIN_CONTENT_MIN_CHARS = 100
 
 _META_CHARSET_RE = re.compile(rb"""charset=["']?\s*([a-zA-Z0-9_\-]+)""", re.IGNORECASE)
 _INLINE_WHITESPACE_RE = re.compile(r"[^\S\n]+")
+_SOURCE_NEWLINE_RE = re.compile(r"[\r\n]+")
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,7 +162,9 @@ class _TextExtractor(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._in_title:
             self._title.append(data)
-        self._emit(data)
+        # Newlines in the source are ordinary whitespace in HTML; only block
+        # tags introduce line breaks in the extracted text.
+        self._emit(_SOURCE_NEWLINE_RE.sub(" ", data))
 
     def _emit(self, text: str) -> None:
         if self._skip_depth or self._in_title:

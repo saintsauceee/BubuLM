@@ -112,7 +112,8 @@ class Fetcher:
         ) from last_error
 
     def _fetch_once(self, url: str) -> FetchResult:
-        with self._client.stream("GET", url) as response:
+        headers = {"User-Agent": self.config.user_agent}
+        with self._client.stream("GET", url, headers=headers) as response:
             if response.status_code in self.config.retry_status_codes:
                 raise _RetryableStatus(response.status_code)
             if response.status_code >= 400:
