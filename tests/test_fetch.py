@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import httpx
 import pytest
 
@@ -118,6 +120,55 @@ def test_accepts_a_body_at_the_limit() -> None:
     config = CrawlerConfig(max_response_bytes=len(body.encode()))
     result = make_fetcher(lambda request: html_response(body), config).fetch("https://example.com/")
     assert result.size_bytes == config.max_response_bytes
+
+
+def test_rejects_a_chunked_body_over_the_limit() -> None:
+    """A streamed response with no Content-Length must still be capped."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        def chunks() -> Iterator[bytes]:
+            for _ in range(50):
+                yield b"x" * 1000
+
+        return httpx.Response(200, content=chunks(), headers={"content-type": "text/html"})
+
+    config = CrawlerConfig(max_response_bytes=1000)
+    with pytest.raises(ResponseTooLargeError, match="exceeds"):
+        make_fetcher(handler, config).fetch("https://example.com/chunked")
+
+
+def test_rejects_a_body_that_exceeds_a_lying_content_length() -> None:
+    """A server understating Content-Length must not defeat the cap."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"x" * 50_000,
+            headers={"content-type": "text/html", "content-length": "10"},
+        )
+
+    config = CrawlerConfig(max_response_bytes=1000)
+    with pytest.raises(ResponseTooLargeError, match="exceeds"):
+        make_fetcher(handler, config).fetch("https://example.com/liar")
+
+
+def test_streaming_cap_stops_before_reading_everything() -> None:
+    """The cap aborts mid-body rather than buffering the whole response."""
+    produced: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        def chunks() -> Iterator[bytes]:
+            for index in range(100):
+                produced.append(index)
+                yield b"x" * 1000
+
+        return httpx.Response(200, content=chunks(), headers={"content-type": "text/html"})
+
+    config = CrawlerConfig(max_response_bytes=5000)
+    with pytest.raises(ResponseTooLargeError):
+        make_fetcher(handler, config).fetch("https://example.com/chunked")
+
+    assert len(produced) < 100
 
 
 def test_size_limit_is_configurable() -> None:

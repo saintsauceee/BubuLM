@@ -120,6 +120,22 @@ def test_tolerates_malformed_markup(markup: str) -> None:
     assert isinstance(document.text, str)
 
 
+@pytest.mark.parametrize(
+    "markup",
+    [
+        "</script><p>Real visible content</p>",
+        "</style><p>Real visible content</p>",
+        "<p>Real visible content</p></script></script>",
+        "</nav><p>Real visible content</p>",
+        "</main><p>Real visible content</p>",
+    ],
+)
+def test_unbalanced_close_tags_do_not_swallow_the_document(markup: str) -> None:
+    """A stray close tag must not drive a depth counter negative and hide the page."""
+    document = extract_text(html_page(markup))
+    assert "Real visible content" in document.text
+
+
 def test_empty_document_yields_empty_text() -> None:
     document = extract_text("")
     assert document.text == ""
