@@ -6,9 +6,10 @@ package turns that corpus into a trained model.
 
 ## Project status
 
-Early development. The single-worker crawler is implemented: it fetches a URL
-and produces a clean, validated training document. The `llm` package is still
-an empty placeholder. Features are added incrementally.
+Early development. The crawler works on a single machine: it walks a site from
+seed URLs, stores raw HTML on disk, and can turn any single page into a clean,
+validated training document. There is no corpus format and no distribution yet,
+and the `llm` package is still an empty placeholder.
 
 ## Requirements
 
@@ -25,12 +26,20 @@ uv sync --all-groups
 
 ## Running the crawler
 
+Fetch and clean a single page:
+
 ```bash
-uv run python -m crawler https://example.com
+uv run python -m crawler fetch https://example.com
 ```
 
-See [docs/crawler.md](docs/crawler.md) for options, configuration, and library
-usage.
+Crawl outward from a seed, storing raw HTML on disk:
+
+```bash
+uv run python -m crawler crawl https://example.com --output ./raw
+```
+
+See [docs/crawler.md](docs/crawler.md) for the single-page pipeline and
+[docs/crawling.md](docs/crawling.md) for the crawl loop.
 
 ## Running tests
 
@@ -50,7 +59,7 @@ uv run pyright             # static type check
 
 ```text
 bubulm/
-├── crawler/   # single-worker crawl pipeline
+├── crawler/   # fetch pipeline + single-machine crawl loop
 ├── llm/       # model training and inference (empty)
 ├── tests/     # test suite
 └── docs/      # component documentation
