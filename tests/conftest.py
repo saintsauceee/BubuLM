@@ -61,3 +61,27 @@ def long_prose(paragraphs: int = 6) -> str:
         "language model has clean training documents to learn from. "
     )
     return "".join(f"<p>{sentence * 2}</p>" for _ in range(paragraphs))
+
+
+class FakeTime:
+    """A clock whose sleep advances time, as a real one does.
+
+    Pairing a fake sleep with the real ``time.monotonic`` would let the rate
+    limiter's projected wake-up time drift ahead of the clock, so the two must
+    be faked together.
+    """
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+    def advance(self, seconds: float) -> None:
+        """Simulate time passing for reasons other than sleeping."""
+        self.now += seconds
