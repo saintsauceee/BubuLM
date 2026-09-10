@@ -8,6 +8,7 @@ from crawler.crawl import (
     CrawlSettings,
     SiteCrawler,
 )
+from crawler.crawl_async import AsyncSiteCrawler
 from crawler.errors import (
     ContentTypeRejectedError,
     CrawlError,
@@ -17,13 +18,17 @@ from crawler.errors import (
     ResponseTooLargeError,
     TransientFetchError,
 )
+from crawler.fetch_async import AsyncFetcher
 from crawler.frontier import Frontier, FrontierItem
 from crawler.links import extract_links
 from crawler.pipeline import CrawlDocument, Crawler
-from crawler.politeness import PerDomainDelay
+from crawler.politeness import AsyncPerDomainDelay, PerDomainDelay
 from crawler.storage import RawHtmlStore
 
 __all__ = [
+    "AsyncFetcher",
+    "AsyncPerDomainDelay",
+    "AsyncSiteCrawler",
     "ContentTypeRejectedError",
     "CrawlDocument",
     "CrawlError",
