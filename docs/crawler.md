@@ -1,6 +1,7 @@
 # Crawler
 
-The single-worker crawler turns one seed URL into a clean training document.
+The single-page pipeline turns one URL into a clean training document.
+For walking a site, see [crawling.md](crawling.md).
 
 ## Pipeline
 
@@ -26,13 +27,13 @@ pieces without inheriting this orchestration.
 
 ```bash
 uv sync --all-groups
-uv run python -m crawler https://example.com
+uv run python -m crawler fetch https://example.com
 ```
 
 Emit the full document as JSON:
 
 ```bash
-uv run python -m crawler https://example.com --json
+uv run python -m crawler fetch https://example.com --json
 ```
 
 Options:
@@ -54,7 +55,7 @@ content type 'image/png'`.
 
 ```bash
 python3 -m http.server 8000 --directory /path/to/some/html &
-uv run python -m crawler http://localhost:8000/
+uv run python -m crawler fetch http://localhost:8000/
 ```
 
 ## Using it as a library
