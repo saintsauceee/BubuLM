@@ -63,6 +63,10 @@ bytes stored:  759
 
 Exit code is `0` when at least one page was stored, `1` when none was.
 
+The default output directory `./raw/` is gitignored, so a crawl run from the
+repository root never leaves crawled pages staged for commit. Point `--output`
+somewhere outside the repository for anything you intend to keep.
+
 ## Using it as a library
 
 ```python
