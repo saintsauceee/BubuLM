@@ -6,6 +6,7 @@ and the integration tests use a local HTTP server bound to loopback.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 
 import httpx
@@ -85,3 +86,64 @@ class FakeTime:
     def advance(self, seconds: float) -> None:
         """Simulate time passing for reasons other than sleeping."""
         self.now += seconds
+
+
+class FakeAsyncTime:
+    """The async counterpart of :class:`FakeTime`: sleeping advances the clock."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    async def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+    def advance(self, seconds: float) -> None:
+        """Simulate time passing for reasons other than sleeping."""
+        self.now += seconds
+
+
+class AsyncSiteTransport(httpx.AsyncBaseTransport):
+    """An async transport serving a fixed path -> HTML map.
+
+    Unlike ``httpx.MockTransport``, whose handler is synchronous, this one
+    awaits inside the request. That gives concurrent tasks a real interleaving
+    point, which is what the concurrency tests need to observe. It also records
+    how many requests were in flight at once and how often each URL was
+    requested.
+    """
+
+    def __init__(self, pages: dict[str, str], *, latency: float = 0.0) -> None:
+        self.pages = pages
+        self.latency = latency
+        self.in_flight = 0
+        self.max_in_flight = 0
+        self.requests: list[str] = []
+        self.started_at: list[tuple[str, float]] = []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(str(request.url))
+        self.started_at.append((str(request.url), asyncio.get_running_loop().time()))
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            await asyncio.sleep(self.latency)
+            body = self.pages.get(request.url.path)
+            if body is None:
+                return httpx.Response(
+                    404, content=b"missing", headers={"content-type": "text/html"}
+                )
+            return httpx.Response(
+                200,
+                content=body.encode(),
+                headers={"content-type": "text/html; charset=utf-8"},
+            )
+        finally:
+            self.in_flight -= 1
+
+    def count_for(self, url: str) -> int:
+        return self.requests.count(url)
