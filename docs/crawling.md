@@ -142,10 +142,12 @@ from crawler import AsyncSiteCrawler, CrawlSettings, RawHtmlStore
 
 settings = CrawlSettings(max_pages=100, max_depth=3, delay_per_domain=1.0, concurrency=8)
 
+
 async def main() -> None:
     async with AsyncSiteCrawler(RawHtmlStore(Path("./raw")), settings) as crawler:
         report = await crawler.crawl(["https://example.com"])
     print(report.pages_crawled, report.bytes_stored)
+
 
 asyncio.run(main())
 ```
