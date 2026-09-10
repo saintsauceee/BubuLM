@@ -25,7 +25,7 @@ from types import TracebackType
 from crawler.config import CrawlerConfig
 from crawler.errors import CrawlError
 from crawler.extract import decode_html
-from crawler.fetch import Fetcher
+from crawler.fetch import Fetcher, FetchResult
 from crawler.frontier import Frontier, hosts_of
 from crawler.links import extract_links
 from crawler.politeness import PerDomainDelay
@@ -48,9 +48,18 @@ class CrawlSettings:
     follow_external_links: bool = False
     """When false, the crawl stays on the hosts named by the seeds."""
 
+    concurrency: int = 4
+    """How many pages may be in flight at once. Used by AsyncSiteCrawler only.
+
+    Per-host politeness still applies, so raising this speeds up a crawl that
+    spans several hosts far more than one confined to a single host.
+    """
+
     def __post_init__(self) -> None:
         if self.max_pages < 1:
             raise ValueError("max_pages must be at least 1")
+        if self.concurrency < 1:
+            raise ValueError("concurrency must be at least 1")
         if self.max_depth < 0:
             raise ValueError("max_depth must not be negative")
         if self.delay_per_domain < 0:
@@ -96,6 +105,34 @@ class CrawlReport:
     @property
     def bytes_stored(self) -> int:
         return sum(page.size_bytes for page in self.pages)
+
+
+def store_and_extract(response: FetchResult, store: RawHtmlStore) -> tuple[Path, list[str]]:
+    """Save a response body and return where it went plus the links it contains.
+
+    Shared by the sequential and concurrent crawlers so both store and parse
+    pages identically.
+    """
+    path = store.save(response.url, response.body)
+    html = decode_html(response.body, response.charset)
+    return path, extract_links(html, response.url)
+
+
+def make_page(response: FetchResult, depth: int, path: Path, links_found: int) -> CrawledPage:
+    """Build the report entry for a stored page."""
+    return CrawledPage(
+        url=response.url,
+        depth=depth,
+        path=path,
+        content_type=response.content_type,
+        size_bytes=response.size_bytes,
+        links_found=links_found,
+    )
+
+
+def make_failure(url: str, depth: int, error: Exception) -> CrawlFailure:
+    """Build the report entry for a URL that could not be crawled."""
+    return CrawlFailure(url=url, depth=depth, reason=type(error).__name__, detail=str(error))
 
 
 class SiteCrawler:
@@ -163,25 +200,11 @@ class SiteCrawler:
         try:
             response = self._fetcher.fetch(url)
         except CrawlError as error:
-            report.failures.append(
-                CrawlFailure(url=url, depth=depth, reason=type(error).__name__, detail=str(error))
-            )
+            report.failures.append(make_failure(url, depth, error))
             return
 
-        path = self.store.save(response.url, response.body)
-
-        html = decode_html(response.body, response.charset)
-        links = extract_links(html, response.url)
+        path, links = store_and_extract(response, self.store)
         for link in links:
             frontier.add(link, depth + 1)
 
-        report.pages.append(
-            CrawledPage(
-                url=response.url,
-                depth=depth,
-                path=path,
-                content_type=response.content_type,
-                size_bytes=response.size_bytes,
-                links_found=len(links),
-            )
-        )
+        report.pages.append(make_page(response, depth, path, len(links)))

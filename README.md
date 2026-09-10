@@ -7,9 +7,9 @@ package turns that corpus into a trained model.
 ## Project status
 
 Early development. The crawler works on a single machine: it walks a site from
-seed URLs, stores raw HTML on disk, and can turn any single page into a clean,
-validated training document. There is no corpus format and no distribution yet,
-and the `llm` package is still an empty placeholder.
+seed URLs concurrently, stores raw HTML on disk, and can turn any single page
+into a clean, validated training document. There is no corpus format and no
+distribution yet, and the `llm` package is still an empty placeholder.
 
 ## Requirements
 

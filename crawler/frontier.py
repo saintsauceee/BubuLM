@@ -61,25 +61,41 @@ class Frontier:
         except InvalidURLError:
             return False
 
-    def add(self, url: str, depth: int = 0) -> bool:
-        """Enqueue ``url`` at ``depth``. Returns whether it was actually added.
+    def admit(self, url: str, depth: int = 0) -> FrontierItem | None:
+        """Decide whether ``url`` should be visited, marking it seen if so.
 
-        A URL is skipped when it is malformed, already seen, deeper than
-        ``max_depth``, or on a host outside ``allowed_hosts``.
+        Returns the normalized item to visit, or None when the URL is malformed,
+        already seen, deeper than ``max_depth``, or on a host outside
+        ``allowed_hosts``.
+
+        This is the admission decision on its own, without the queue, so a
+        crawler using a different queue -- an ``asyncio.Queue``, say -- gets
+        identical deduplication rather than a second implementation of them.
+
+        Concurrency: the check-then-record of the visited set contains no
+        ``await``, so under a single event loop it cannot interleave with
+        another task. Two tasks can never both be handed the same URL.
         """
         if self.max_depth is not None and depth > self.max_depth:
-            return False
+            return None
         try:
             normalized = normalize_url(url)
         except InvalidURLError:
-            return False
+            return None
         if normalized in self._seen:
-            return False
+            return None
         if not self._host_allowed(normalized):
-            return False
+            return None
 
         self._seen.add(normalized)
-        self._queue.append(FrontierItem(url=normalized, depth=depth))
+        return FrontierItem(url=normalized, depth=depth)
+
+    def add(self, url: str, depth: int = 0) -> bool:
+        """Enqueue ``url`` at ``depth``. Returns whether it was actually added."""
+        item = self.admit(url, depth)
+        if item is None:
+            return False
+        self._queue.append(item)
         return True
 
     def add_seeds(self, urls: Iterable[str]) -> int:

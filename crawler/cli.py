@@ -6,13 +6,15 @@ uv run python -m crawler https://example.com
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from crawler.config import CrawlerConfig
-from crawler.crawl import CrawlSettings, SiteCrawler
+from crawler.crawl import CrawlReport, CrawlSettings
+from crawler.crawl_async import AsyncSiteCrawler
 from crawler.errors import CrawlError
 from crawler.pipeline import Crawler
 from crawler.storage import RawHtmlStore
@@ -92,6 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=crawl_defaults.delay_per_domain,
         help="Minimum seconds between requests to one host (default: %(default)s)",
+    )
+    crawl.add_argument(
+        "--concurrency",
+        type=int,
+        default=crawl_defaults.concurrency,
+        help="Pages in flight at once; per-host delay still applies (default: %(default)s)",
     )
     crawl.add_argument(
         "--follow-external",
@@ -176,11 +184,11 @@ def _run_crawl(args: argparse.Namespace) -> int:
         max_depth=args.max_depth,
         delay_per_domain=args.delay,
         follow_external_links=args.follow_external,
+        concurrency=args.concurrency,
     )
 
     store = RawHtmlStore(args.output)
-    with SiteCrawler(store, settings, config) as crawler:
-        report = crawler.crawl(args.seeds)
+    report = asyncio.run(_crawl(store, settings, config, args.seeds))
 
     for page in report.pages:
         print(f"  [d{page.depth}] {page.size_bytes:>7} B  {page.links_found:>3} links  {page.url}")
@@ -191,7 +199,18 @@ def _run_crawl(args: argparse.Namespace) -> int:
     print(f"pages crawled: {report.pages_crawled}")
     print(f"failures:      {len(report.failures)}")
     print(f"urls seen:     {report.urls_seen}")
+    print(f"concurrency:   {settings.concurrency}")
     print(f"bytes stored:  {report.bytes_stored}")
     print(f"output:        {store.root}")
 
     return 0 if report.pages_crawled else 1
+
+
+async def _crawl(
+    store: RawHtmlStore,
+    settings: CrawlSettings,
+    config: CrawlerConfig,
+    seeds: list[str],
+) -> CrawlReport:
+    async with AsyncSiteCrawler(store, settings, config) as crawler:
+        return await crawler.crawl(seeds)
