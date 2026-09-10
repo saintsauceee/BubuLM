@@ -12,7 +12,7 @@ from crawler.cli import build_parser, main
 def test_parser_defaults_match_the_config() -> None:
     from crawler.config import CrawlerConfig
 
-    args = build_parser().parse_args(["https://example.com"])
+    args = build_parser().parse_args(["fetch", "https://example.com"])
     defaults = CrawlerConfig()
 
     assert args.url == "https://example.com"
@@ -25,7 +25,7 @@ def test_parser_defaults_match_the_config() -> None:
 
 def test_parser_accepts_overrides() -> None:
     args = build_parser().parse_args(
-        ["https://example.com", "--max-bytes", "100", "--min-text", "5", "--json"]
+        ["fetch", "https://example.com", "--max-bytes", "100", "--min-text", "5", "--json"]
     )
     assert args.max_bytes == 100
     assert args.min_text == 5
@@ -33,7 +33,7 @@ def test_parser_accepts_overrides() -> None:
 
 
 def test_reports_a_crawl_error_without_traceback(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = main(["ftp://example.com/file"])
+    exit_code = main(["fetch", "ftp://example.com/file"])
     captured = capsys.readouterr()
 
     assert exit_code == 1
@@ -62,7 +62,7 @@ def test_json_output_is_valid(
 
     monkeypatch.setattr(cli.Crawler, "crawl", fake_crawl)
 
-    assert main(["https://example.com", "--json"]) == 0
+    assert main(["fetch", "https://example.com", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["title"] == "Example"
